@@ -88,6 +88,40 @@ api.setHardModeContext({
 assert.strictEqual(api.hardModeValidate('BROAD').ok, false);
 assert.strictEqual(api.hardModeValidate('AMPLE').ok, true);
 
+// hard/extreme/insanity pin greens from prior results and prefill input row
+api.setHardModeContext({
+  grid: [
+    ['S', 'P', 'A', 'R', 'E'],
+    ['', '', '', '', ''],
+    ['', '', '', '', ''],
+    ['', '', '', '', ''],
+    ['', '', '', '', ''],
+    ['', '', '', '', '']
+  ],
+  results: [
+    ['absent', 'absent', 'correct', 'absent', 'absent'],
+    ['', '', '', '', ''],
+    ['', '', '', '', ''],
+    ['', '', '', '', ''],
+    ['', '', '', '', ''],
+    ['', '', '', '', '']
+  ]
+});
+api.setModeForTest('hard');
+const hardPins = Array.from(api.computePinnedGreensFromResults());
+assert.deepStrictEqual(hardPins, [false, false, true, false, false]);
+assert.deepStrictEqual(Array.from(api.getPinnedColsForTest()), [false, false, true, false, false]);
+assert.strictEqual(Array.from(api.getInputRowForTest())[2], 'A');
+
+api.setModeForTest('extreme');
+assert.strictEqual(Array.from(api.getInputRowForTest())[2], 'A');
+
+api.setModeForTest('insanity');
+assert.strictEqual(Array.from(api.getInputRowForTest())[2], 'A');
+
+api.setModeForTest('normal');
+assert.deepStrictEqual(Array.from(api.getPinnedColsForTest()), [false, false, true, false, false]);
+
 // malformed/empty payload handling
 assert.strictEqual(api.normalizeWordLists(null), null);
 assert.strictEqual(api.normalizeWordLists({ answers: [] }), null);
