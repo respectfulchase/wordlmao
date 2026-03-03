@@ -3,6 +3,11 @@
   const WORDLES_URL = "https://raw.githubusercontent.com/stuartpb/wordles/main/wordles.json";
   const NONWORDLES_URL = "https://raw.githubusercontent.com/stuartpb/wordles/main/nonwordles.json";
 
+  const SUPABASE_URL = "https://yakyjrtkrodxvtvrgmzc.supabase.co";
+  const SUPABASE_ANON_KEY = "sb_publishable_1y1SLtcnwV5dI4dNt4fqNQ_Wai9VOsk";
+
+  const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
   const BLOCKLIST = new Set([]);
   const ALLOWLIST = new Set([]);
 
