@@ -263,6 +263,38 @@
     setMsg(mode().desc);
   }
 
+  function isPinnedGreensMode() {
+    return !!mode().hard;
+  }
+
+  function computePinnedGreensFromResults() {
+    const locked = Array(COLS).fill(false);
+    for (let r = 0; r < ROWS; r++) {
+      for (let c = 0; c < COLS; c++) {
+        if (results[r][c] === "correct") locked[c] = true;
+      }
+    }
+    return locked;
+  }
+
+  function computePinnedGreenLetters() {
+    const letters = Array(COLS).fill("");
+    for (let r = 0; r < ROWS; r++) {
+      for (let c = 0; c < COLS; c++) {
+        if (results[r][c] === "correct" && grid[r][c]) letters[c] = grid[r][c];
+      }
+    }
+    return letters;
+  }
+
+  function applyPinnedGreensToInputRow() {
+    if (!isPinnedGreensMode()) return;
+    const pinnedLetters = computePinnedGreenLetters();
+    for (let c = 0; c < COLS; c++) {
+      if (pinnedCols[c]) grid[INPUT_ROW][c] = pinnedLetters[c] || "";
+    }
+  }
+
   function nextUnpinnedCol(fromCol) {
     for (let step = 0; step < COLS; step++) {
       const c = (fromCol + step) % COLS;
@@ -275,6 +307,12 @@
   function editTile(r, c) {
     if (gameOver) return;
     if (r !== INPUT_ROW) return;
+
+    if (pinnedCols[c]) {
+      const first = nextUnpinnedCol(c + 1);
+      if (first !== -1) currentCol = first;
+      return;
+    }
 
     currentCol = c;
     manualSelect = true;
@@ -290,6 +328,7 @@
 
   function togglePinAt(col) {
     if (gameOver) return;
+    if (isPinnedGreensMode()) return;
     if (!grid[INPUT_ROW][col]) return; // only if filled
 
     pinnedCols[col] = !pinnedCols[col];
@@ -803,6 +842,11 @@
         }
       }
 
+      if (isPinnedGreensMode()) {
+        pinnedCols = computePinnedGreensFromResults();
+        applyPinnedGreensToInputRow();
+      }
+
       keyState.clear();
       for (const [k, v] of (obj.keyState || [])) keyState.set(k, v);
 
@@ -887,21 +931,6 @@
       return;
     }
 
-    // Carry pinned letters forward ONLY if they scored green
-    const carryLetters = Array(COLS).fill("");
-    const nextPinned = pinnedCols.slice();
-    const removedPins = [];
-
-    for (let c = 0; c < COLS; c++) {
-      if (!pinnedCols[c]) continue;
-      if (res[c] === "correct") {
-        carryLetters[c] = grid[INPUT_ROW][c];
-      } else {
-        removedPins.push(grid[INPUT_ROW][c]);
-        nextPinned[c] = false;
-      }
-    }
-
     shiftLockedUpOne();
 
     for (let c = 0; c < COLS; c++) grid[4][c] = grid[INPUT_ROW][c];
@@ -909,9 +938,9 @@
 
     for (let c = 0; c < COLS; c++) grid[INPUT_ROW][c] = "";
 
-    pinnedCols = nextPinned;
-    for (let c = 0; c < COLS; c++) {
-      if (pinnedCols[c]) grid[INPUT_ROW][c] = carryLetters[c];
+    if (isPinnedGreensMode()) {
+      pinnedCols = computePinnedGreensFromResults();
+      applyPinnedGreensToInputRow();
     }
 
     const first = nextUnpinnedCol(0);
@@ -923,11 +952,7 @@
     rebuildKeyStateFromBoard();
     render();
 
-    if (removedPins.length) {
-      setMsg(`Pin cleared: ${removedPins.join(", ")} not correct.`);
-    } else {
-      setMsg("");
-    }
+    setMsg("");
 
     saveGameState();
   }
@@ -939,6 +964,10 @@
       return;
     }
     setModeIndex(modeIndex + 1);
+    if (isPinnedGreensMode()) {
+      pinnedCols = computePinnedGreensFromResults();
+      applyPinnedGreensToInputRow();
+    }
     saveModePreference();
     showModeDesc();
     saveGameState();
@@ -1069,7 +1098,19 @@
             results[row][col] = (r?.[row]?.[col] || "");
           }
         }
-      }
+      },
+      computePinnedGreensFromResults,
+      computePinnedGreenLetters,
+      applyPinnedGreensToInputRow,
+      setModeForTest: (key) => {
+        setModeByKey(key);
+        if (isPinnedGreensMode()) {
+          pinnedCols = computePinnedGreensFromResults();
+          applyPinnedGreensToInputRow();
+        }
+      },
+      getInputRowForTest: () => grid[INPUT_ROW].slice(),
+      getPinnedColsForTest: () => pinnedCols.slice()
     };
   }
 
