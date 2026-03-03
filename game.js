@@ -201,6 +201,7 @@
 
   let guessCount = 0;     // number of submitted guesses
   let currentCol = 0;
+  let hasSubmittedScore = false;
 
   // manualSelect true means: user clicked a tile (typing sticks)
   let manualSelect = false;
@@ -263,6 +264,29 @@
     } catch (error) {
       console.error("Failed to get or create player:", error);
       return null;
+    }
+  }
+
+  async function submitScore({ puzzleId, mode, guesses, win }) {
+    try {
+      const playerId = await getOrCreatePlayerId();
+      if (!playerId) return;
+
+      const { error } = await supabase
+        .from("scores")
+        .insert({
+          player_id: playerId,
+          puzzle_id: puzzleId,
+          mode,
+          guesses,
+          win
+        });
+
+      if (error) {
+        console.error("Failed to submit score:", error);
+      }
+    } catch (error) {
+      console.error("Failed to submit score:", error);
     }
   }
 
@@ -953,6 +977,15 @@
 
       setMsg("Nice. You got it.");
       gameOver = true;
+      if (!hasSubmittedScore) {
+        hasSubmittedScore = true;
+        void submitScore({
+          puzzleId: puzzleNumber(),
+          mode: mode().key,
+          guesses: guessCount + 1,
+          win: true
+        });
+      }
 
       updateShareButton();
       saveGameState();
@@ -969,6 +1002,15 @@
 
       setMsg(`Answer: ${ANSWER}`);
       gameOver = true;
+      if (!hasSubmittedScore) {
+        hasSubmittedScore = true;
+        void submitScore({
+          puzzleId: puzzleNumber(),
+          mode: mode().key,
+          guesses: guessCount + 1,
+          win: false
+        });
+      }
 
       updateShareButton();
       saveGameState();
@@ -1094,6 +1136,7 @@
 
   // ---------- Boot ----------
   async function boot() {
+    hasSubmittedScore = false;
     dateLabelEl.textContent = dateWithCounterLabel();
     setMsg("Loading...");
 
@@ -1148,6 +1191,7 @@
       computePinnedGreenLetters,
       applyPinnedGreensToInputRow,
       getOrCreatePlayerId,
+      submitScore,
       setModeForTest: (key) => {
         setModeByKey(key);
         if (isPinnedGreensMode()) {
