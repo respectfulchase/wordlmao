@@ -46,7 +46,31 @@ function loadGame() {
       },
       createElement() { return new DummyEl(); }
     },
-    window: { addEventListener() {} },
+    window: {
+      addEventListener() {},
+      prompt: () => 'tester',
+      supabase: {
+        createClient() {
+          return {
+            from() {
+              return {
+                insert() {
+                  return {
+                    select() {
+                      return {
+                        async single() {
+                          return { data: { id: 123 }, error: null };
+                        }
+                      };
+                    }
+                  };
+                }
+              };
+            }
+          };
+        }
+      }
+    },
     globalThis: null,
     __WORDLMAO_DISABLE_BOOT__: true
   };
@@ -138,4 +162,15 @@ api.migrateLegacyDailyState(10);
 assert.strictEqual(storage.get(api.stateKey(10)), '{"v":1}');
 assert.strictEqual(storage.has(api.legacyStateKey(10)), false);
 
-console.log('ok');
+(async () => {
+  const firstId = await api.getOrCreatePlayerId();
+  assert.strictEqual(firstId, '123');
+  assert.strictEqual(storage.get('wordlmao_nickname'), 'tester');
+  assert.strictEqual(storage.get('wordlmao_player_id'), '123');
+
+  storage.set('wordlmao_player_id', '999');
+  const existingId = await api.getOrCreatePlayerId();
+  assert.strictEqual(existingId, '999');
+
+  console.log('ok');
+})();

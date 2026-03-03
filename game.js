@@ -225,7 +225,46 @@
   let modeIndex = 0;
 
   const MODE_PREF_KEY = "wordlmao_mode_pref_v1";
+  const PLAYER_ID_KEY = "wordlmao_player_id";
+  const PLAYER_NICKNAME_KEY = "wordlmao_nickname";
   function mode() { return MODES[modeIndex]; }
+
+  async function getOrCreatePlayerId() {
+    try {
+      const existingPlayerId = localStorage.getItem(PLAYER_ID_KEY);
+      if (existingPlayerId) return existingPlayerId;
+
+      let nickname = localStorage.getItem(PLAYER_NICKNAME_KEY);
+      if (!nickname) {
+        const input = window.prompt("Choose a nickname (for your stats):");
+        nickname = (input || "").trim() || "anonymous";
+        localStorage.setItem(PLAYER_NICKNAME_KEY, nickname);
+      }
+
+      const { data, error } = await supabase
+        .from("players")
+        .insert({ nickname })
+        .select("id")
+        .single();
+
+      if (error) {
+        console.error("Failed to create player:", error);
+        return null;
+      }
+
+      const playerId = data?.id;
+      if (!playerId) {
+        console.error("Failed to create player: missing player id in response.");
+        return null;
+      }
+
+      localStorage.setItem(PLAYER_ID_KEY, String(playerId));
+      return String(playerId);
+    } catch (error) {
+      console.error("Failed to get or create player:", error);
+      return null;
+    }
+  }
 
   function setModeByKey(key) {
     const idx = MODES.findIndex(m => m.key === key);
@@ -1063,6 +1102,7 @@
     saveModePreference();
 
     const lists = await loadWordLists();
+    await getOrCreatePlayerId();
     VALID = new Set(lists.valid);
     const dailyAnswer = pickDailyAnswer(lists.answers) || pickDailyAnswer(FALLBACK_ANSWERS);
     ANSWER = (dailyAnswer || FALLBACK_ANSWERS[0]).toUpperCase();
@@ -1107,6 +1147,7 @@
       computePinnedGreensFromResults,
       computePinnedGreenLetters,
       applyPinnedGreensToInputRow,
+      getOrCreatePlayerId,
       setModeForTest: (key) => {
         setModeByKey(key);
         if (isPinnedGreensMode()) {
