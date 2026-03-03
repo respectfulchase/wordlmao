@@ -24,6 +24,11 @@ function loadGame() {
   const ids = new Map();
   const local = new Map();
   const scoreInserts = [];
+  const scoreRows = [
+    { player_id: "999", puzzle_id: 7, mode: "normal", win: true, guesses: 3, created_at: "2026-02-25T12:00:00.000Z" },
+    { player_id: "999", puzzle_id: 6, mode: "hard", win: false, guesses: 6, created_at: "2026-02-24T12:00:00.000Z" },
+    { player_id: "123", puzzle_id: 5, mode: "normal", win: true, guesses: 2, created_at: "2026-02-23T12:00:00.000Z" }
+  ];
   const ctx = {
     console,
     setTimeout,
@@ -74,6 +79,39 @@ function loadGame() {
                   }
 
                   return Promise.resolve({ data: null, error: null });
+                },
+                select() {
+                  if (table !== 'scores') {
+                    return {
+                      eq() {
+                        return {
+                          order() {
+                            return {
+                              limit: async () => ({ data: [], error: null })
+                            };
+                          }
+                        };
+                      }
+                    };
+                  }
+
+                  return {
+                    eq(column, value) {
+                      const filtered = scoreRows.filter((row) => row[column] === value);
+                      return {
+                        order(orderColumn, { ascending }) {
+                          const sorted = filtered.slice().sort((a, b) => {
+                            const av = new Date(a[orderColumn]).getTime();
+                            const bv = new Date(b[orderColumn]).getTime();
+                            return ascending ? av - bv : bv - av;
+                          });
+                          return {
+                            limit: async (n) => ({ data: sorted.slice(0, n), error: null })
+                          };
+                        }
+                      };
+                    }
+                  };
                 }
               };
             }
@@ -183,6 +221,11 @@ assert.strictEqual(storage.has(api.legacyStateKey(10)), false);
   assert.strictEqual(existingId, '999');
 
   await api.submitScore({ puzzleId: 12, mode: 'hard', guesses: 4, win: false });
+
+  const mine = await api.fetchMyScores({ limit: 2 });
+  assert.strictEqual(mine.length, 2);
+  assert.strictEqual(mine[0].puzzle_id, 7);
+  assert.strictEqual(mine[1].puzzle_id, 6);
   assert.strictEqual(scoreInserts.length, 1);
   assert.strictEqual(scoreInserts[0].player_id, '999');
   assert.strictEqual(scoreInserts[0].puzzle_id, 12);

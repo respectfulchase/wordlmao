@@ -169,6 +169,7 @@
   const modeBtn = document.getElementById("modeBtn");
   const modeIconEl = document.getElementById("modeIcon");
   const titleBtn = document.getElementById("titleBtn");
+  const myStatsBtn = document.getElementById("myStatsBtn");
 
   // ---------- Config ----------
   const ROWS = 6, COLS = 5;
@@ -202,6 +203,8 @@
   let guessCount = 0;     // number of submitted guesses
   let currentCol = 0;
   let hasSubmittedScore = false;
+  let myStatsOpen = false;
+  let msgBeforeStats = "";
 
   // manualSelect true means: user clicked a tile (typing sticks)
   let manualSelect = false;
@@ -290,6 +293,106 @@
     }
   }
 
+  async function fetchMyScores({ limit = 30 } = {}) {
+    try {
+      const playerId = await getOrCreatePlayerId();
+      if (!playerId) return [];
+
+      const { data, error } = await supabase
+        .from("scores")
+        .select("*")
+        .eq("player_id", playerId)
+        .order("created_at", { ascending: false })
+        .limit(limit);
+
+      if (error) {
+        console.error("Failed to fetch my scores:", error);
+        return [];
+      }
+
+      return Array.isArray(data) ? data : [];
+    } catch (error) {
+      console.error("Failed to fetch my scores:", error);
+      return [];
+    }
+  }
+
+  function formatScoreDate(value) {
+    if (!value) return "-";
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return "-";
+    return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  }
+
+  function formatModeLabel(modeKey) {
+    if (!modeKey) return "Mode";
+    return modeKey.charAt(0).toUpperCase() + modeKey.slice(1);
+  }
+
+  function formatStatsLine(row) {
+    const puzzleId = Number(row?.puzzle_id);
+    const puzzleLabel = Number.isFinite(puzzleId) ? `#${pad3(puzzleId)}` : "#---";
+    const modeLabel = formatModeLabel(row?.mode);
+
+    if (row?.win) {
+      const guesses = Number(row?.guesses);
+      const guessLabel = Number.isFinite(guesses) ? ` in ${guesses}` : "";
+      return `${puzzleLabel} ${modeLabel}: Win${guessLabel}`;
+    }
+
+    return `${puzzleLabel} ${modeLabel}: Loss`;
+  }
+
+  function showMyStatsText(scores) {
+    const nickname = localStorage.getItem(PLAYER_NICKNAME_KEY) || "anonymous";
+    const lines = [`${nickname}`];
+
+    if (!scores.length) {
+      lines.push("No results yet.");
+    } else {
+      for (const row of scores) {
+        const shortDate = formatScoreDate(row?.created_at);
+        lines.push(`${formatStatsLine(row)} (${shortDate})`);
+      }
+    }
+
+    msgEl.textContent = lines.join("\n");
+  }
+
+  function closeMyStats() {
+    if (!myStatsOpen) return;
+    myStatsOpen = false;
+
+    if (msgBeforeStats) {
+      msgEl.textContent = msgBeforeStats;
+      msgBeforeStats = "";
+      return;
+    }
+
+    if (!gameHasStarted() && !gameOver) {
+      showModeDesc();
+      return;
+    }
+
+    setMsg("");
+  }
+
+  async function toggleMyStats() {
+    if (myStatsOpen) {
+      closeMyStats();
+      return;
+    }
+
+    msgBeforeStats = msgEl.textContent || "";
+    myStatsOpen = true;
+    msgEl.textContent = "Loading stats...";
+
+    const scores = await fetchMyScores({ limit: 12 });
+    if (!myStatsOpen) return;
+
+    showMyStatsText(scores);
+  }
+
   function setModeByKey(key) {
     const idx = MODES.findIndex(m => m.key === key);
     modeIndex = idx >= 0 ? idx : 0;
@@ -310,7 +413,10 @@
   }
 
   // ---------- Helpers ----------
-  function setMsg(t) { msgEl.textContent = (t || "").toUpperCase(); }
+  function setMsg(t) {
+    if (myStatsOpen) myStatsOpen = false;
+    msgEl.textContent = (t || "").toUpperCase();
+  }
 
   function tileEl(r, c) {
     return boardEl.querySelector(`.tile[data-row="${r}"][data-col="${c}"]`);
@@ -1076,6 +1182,7 @@
   });
 
   if (modeBtn) modeBtn.addEventListener("click", handleModeClick);
+  if (myStatsBtn) myStatsBtn.addEventListener("click", () => { void toggleMyStats(); });
 
   // Hidden reset: dblclick title (desktop), triple-tap title (mobile), Shift+R
   let tapCount = 0;
@@ -1192,6 +1299,7 @@
       applyPinnedGreensToInputRow,
       getOrCreatePlayerId,
       submitScore,
+      fetchMyScores,
       setModeForTest: (key) => {
         setModeByKey(key);
         if (isPinnedGreensMode()) {
