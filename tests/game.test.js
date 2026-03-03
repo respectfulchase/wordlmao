@@ -23,6 +23,7 @@ class DummyEl {
 function loadGame() {
   const ids = new Map();
   const local = new Map();
+  const scoreInserts = [];
   const ctx = {
     console,
     setTimeout,
@@ -52,18 +53,27 @@ function loadGame() {
       supabase: {
         createClient() {
           return {
-            from() {
+            from(table) {
               return {
-                insert() {
-                  return {
-                    select() {
-                      return {
-                        async single() {
-                          return { data: { id: 123 }, error: null };
-                        }
-                      };
-                    }
-                  };
+                insert(payload) {
+                  if (table === 'players') {
+                    return {
+                      select() {
+                        return {
+                          async single() {
+                            return { data: { id: 123 }, error: null };
+                          }
+                        };
+                      }
+                    };
+                  }
+
+                  if (table === 'scores') {
+                    scoreInserts.push(payload);
+                    return Promise.resolve({ data: null, error: null });
+                  }
+
+                  return Promise.resolve({ data: null, error: null });
                 }
               };
             }
@@ -79,10 +89,10 @@ function loadGame() {
   const src = fs.readFileSync('game.js', 'utf8');
   vm.createContext(ctx);
   vm.runInContext(src, ctx);
-  return { api: ctx.__WORDLMAO_TEST__, storage: local };
+  return { api: ctx.__WORDLMAO_TEST__, storage: local, scoreInserts };
 }
 
-const { api, storage } = loadGame();
+const { api, storage, scoreInserts } = loadGame();
 
 // scoreGuess duplicate-letter behavior
 assert.deepStrictEqual(
@@ -171,6 +181,14 @@ assert.strictEqual(storage.has(api.legacyStateKey(10)), false);
   storage.set('wordlmao_player_id', '999');
   const existingId = await api.getOrCreatePlayerId();
   assert.strictEqual(existingId, '999');
+
+  await api.submitScore({ puzzleId: 12, mode: 'hard', guesses: 4, win: false });
+  assert.strictEqual(scoreInserts.length, 1);
+  assert.strictEqual(scoreInserts[0].player_id, '999');
+  assert.strictEqual(scoreInserts[0].puzzle_id, 12);
+  assert.strictEqual(scoreInserts[0].mode, 'hard');
+  assert.strictEqual(scoreInserts[0].guesses, 4);
+  assert.strictEqual(scoreInserts[0].win, false);
 
   console.log('ok');
 })();
