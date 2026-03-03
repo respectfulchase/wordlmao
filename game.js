@@ -17,6 +17,9 @@
     "truth","union","value","voice","watch","water","where","while","white","world","young"
   ];
 
+  const LISTS_CACHE_KEY = "wordlmao_lists_v1";
+  const LEGACY_LISTS_CACHE_KEY = "wordlite_lists_v1";
+
   function isFive(w) { return /^[a-z]{5}$/.test(w); }
 
   function filterAnswerCandidates(words) {
@@ -47,24 +50,66 @@
     return keep;
   }
 
-  async function loadWordLists() {
-    const cacheKey = "wordlite_lists_v1";
-    const cached = localStorage.getItem(cacheKey);
-    if (cached) {
-      try { return JSON.parse(cached); } catch { /* ignore */ }
+  function normalizeWordLists(payload) {
+    if (!payload || typeof payload !== "object") return null;
+
+    const answersRaw = Array.isArray(payload.answers) ? payload.answers : [];
+    const guessesRaw = Array.isArray(payload.guessesOnly) ? payload.guessesOnly : [];
+
+    const answers = filterAnswerCandidates(
+      answersRaw.map(String).map(w => w.toLowerCase()).filter(isFive)
+    );
+    if (!answers.length) return null;
+
+    const guessesOnly = guessesRaw.map(String).map(w => w.toLowerCase()).filter(isFive);
+    const validBase = Array.isArray(payload.valid) ? payload.valid : [];
+    const valid = Array.from(new Set([
+      ...answers,
+      ...guessesOnly,
+      ...validBase.map(String).map(w => w.toLowerCase()).filter(isFive)
+    ]));
+
+    return { answers, guessesOnly, valid };
+  }
+
+  function readCachedWordLists() {
+    const keys = [LISTS_CACHE_KEY, LEGACY_LISTS_CACHE_KEY];
+    for (const key of keys) {
+      const cached = localStorage.getItem(key);
+      if (!cached) continue;
+      try {
+        const normalized = normalizeWordLists(JSON.parse(cached));
+        if (!normalized) continue;
+        if (key !== LISTS_CACHE_KEY) {
+          localStorage.setItem(LISTS_CACHE_KEY, JSON.stringify(normalized));
+          localStorage.removeItem(LEGACY_LISTS_CACHE_KEY);
+        }
+        return normalized;
+      } catch {
+        /* ignore malformed cache */
+      }
     }
+    return null;
+  }
+
+  async function loadWordLists() {
+    const cached = readCachedWordLists();
+    if (cached) return cached;
+
     try {
       const [answersRaw, guessesRaw] = await Promise.all([
         fetch(WORDLES_URL).then(r => r.json()),
         fetch(NONWORDLES_URL).then(r => r.json())
       ]);
-      const answers = filterAnswerCandidates(
-        answersRaw.map(String).map(w => w.toLowerCase()).filter(isFive)
-      );
-      const guessesOnly = guessesRaw.map(String).map(w => w.toLowerCase()).filter(isFive);
-      const valid = Array.from(new Set([...answers, ...guessesOnly]));
-      const result = { answers, guessesOnly, valid };
-      localStorage.setItem(cacheKey, JSON.stringify(result));
+
+      const result = normalizeWordLists({
+        answers: answersRaw,
+        guessesOnly: guessesRaw
+      });
+      if (!result) throw new Error("Invalid fetched word lists");
+
+      localStorage.setItem(LISTS_CACHE_KEY, JSON.stringify(result));
+      localStorage.removeItem(LEGACY_LISTS_CACHE_KEY);
       return result;
     } catch {
       const answers = filterAnswerCandidates(FALLBACK_ANSWERS.slice());
@@ -104,6 +149,7 @@
   }
 
   function pickDailyAnswer(answers) {
+    if (!Array.isArray(answers) || answers.length === 0) return null;
     const dn = dayNumberLocal();
     const schedule = seededShuffle(answers, 1337);
     return schedule[((dn % schedule.length) + schedule.length) % schedule.length];
@@ -380,7 +426,7 @@
 
     const enterBar = document.createElement("button");
     enterBar.type = "button";
-    enterBar.className = "clearbar";
+    enterBar.className = "enterbar";
     enterBar.textContent = "ENTER";
     enterBar.addEventListener("click", () => {
       submitGuess();
@@ -685,8 +731,28 @@
   }
 
   // ---------- Persistence ----------
-  function stateKey() {
-    return "wordlite_state_" + dayNumberLocal();
+  function stateKey(day = dayNumberLocal()) {
+    return "wordlmao_state_" + day;
+  }
+
+  function legacyStateKey(day = dayNumberLocal()) {
+    return "wordlite_state_" + day;
+  }
+
+  function migrateLegacyDailyState(day = dayNumberLocal()) {
+    try {
+      const next = stateKey(day);
+      if (localStorage.getItem(next)) return;
+
+      const old = legacyStateKey(day);
+      const legacy = localStorage.getItem(old);
+      if (!legacy) return;
+
+      localStorage.setItem(next, legacy);
+      localStorage.removeItem(old);
+    } catch {
+      /* ignore */
+    }
   }
 
   function saveGameState() {
@@ -964,7 +1030,10 @@
 
     const lists = await loadWordLists();
     VALID = new Set(lists.valid);
-    ANSWER = pickDailyAnswer(lists.answers).toUpperCase();
+    const dailyAnswer = pickDailyAnswer(lists.answers) || pickDailyAnswer(FALLBACK_ANSWERS);
+    ANSWER = (dailyAnswer || FALLBACK_ANSWERS[0]).toUpperCase();
+
+    migrateLegacyDailyState();
 
     loadGameState();
     saveModePreference();
@@ -984,5 +1053,27 @@
     saveGameState();
   }
 
-  boot();
+  if (typeof globalThis !== "undefined") {
+    globalThis.__WORDLMAO_TEST__ = {
+      normalizeWordLists,
+      scoreGuess,
+      hardModeValidate,
+      pickDailyAnswer,
+      stateKey,
+      legacyStateKey,
+      migrateLegacyDailyState,
+      setHardModeContext: ({ grid: g, results: r }) => {
+        for (let row = 0; row < ROWS; row++) {
+          for (let col = 0; col < COLS; col++) {
+            grid[row][col] = (g?.[row]?.[col] || "").toUpperCase();
+            results[row][col] = (r?.[row]?.[col] || "");
+          }
+        }
+      }
+    };
+  }
+
+  if (!globalThis.__WORDLMAO_DISABLE_BOOT__) {
+    boot();
+  }
 })();

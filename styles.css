@@ -265,7 +265,7 @@ body {
 }
 
 /* Top ENTER bar */
-.clearbar {
+.enterbar {
     height: calc(var(--key-h) * 1);
     border-radius: var(--key-r);
     background: #6f7072;
@@ -285,7 +285,7 @@ body {
     text-overflow: ellipsis;
 }
 
-.clearbar:active {
+.enterbar:active {
     filter: brightness(.92);
 }
 
@@ -327,8 +327,8 @@ body {
 /* Remove browser focus ring for game buttons */
 .key:focus,
 .key:focus-visible,
-.clearbar:focus,
-.clearbar:focus-visible,
+.enterbar:focus,
+.enterbar:focus-visible,
 .icon-btn:focus,
 .icon-btn:focus-visible {
     outline: none;
