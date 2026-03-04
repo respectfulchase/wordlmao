@@ -146,6 +146,13 @@ body {
     opacity: .95;
 }
 
+.stats-ic {
+    width: 34px;
+    height: 34px;
+    fill: currentColor;
+    opacity: .95;
+}
+
 .top-actions {
     display: flex;
     align-items: center;
@@ -254,6 +261,12 @@ body {
     font-size: 13px;
     letter-spacing: .2px;
     text-transform: uppercase;
+}
+
+.msg.stats-readout {
+    white-space: pre-line;
+    text-transform: none;
+    line-height: 1.35;
 }
 
 /* Keyboard */

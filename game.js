@@ -169,6 +169,7 @@
   const modeBtn = document.getElementById("modeBtn");
   const modeIconEl = document.getElementById("modeIcon");
   const titleBtn = document.getElementById("titleBtn");
+  const myStatsBtn = document.getElementById("myStatsBtn");
 
   // ---------- Config ----------
   const ROWS = 6, COLS = 5;
@@ -202,6 +203,7 @@
   let guessCount = 0;     // number of submitted guesses
   let currentCol = 0;
   let hasSubmittedScore = false;
+  let myStatsOpen = false;
 
   // manualSelect true means: user clicked a tile (typing sticks)
   let manualSelect = false;
@@ -290,6 +292,103 @@
     }
   }
 
+  async function fetchMyScores({ limit = 30 } = {}) {
+    try {
+      const playerId = await getOrCreatePlayerId();
+      if (!playerId) return [];
+
+      const { data, error } = await supabase
+        .from("scores")
+        .select("*")
+        .eq("player_id", playerId)
+        .order("created_at", { ascending: false })
+        .limit(limit);
+
+      if (error) {
+        console.error("Failed to fetch my scores:", error);
+        return [];
+      }
+
+      return Array.isArray(data) ? data : [];
+    } catch (error) {
+      console.error("Failed to fetch my scores:", error);
+      return [];
+    }
+  }
+
+  function formatScoreDate(value) {
+    if (!value) return "";
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return "";
+    return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  }
+
+  function scoreGuessValue(row) {
+    if (row && Number.isFinite(Number(row.guesses))) return Number(row.guesses);
+    return null;
+  }
+
+  function formatModeLabel(modeKey) {
+    const found = MODES.find((m) => m.key === modeKey);
+    if (!found) return "Mode";
+    return found.key.charAt(0).toUpperCase() + found.key.slice(1);
+  }
+
+  function formatScoreLine(row) {
+    const puzzle = Number.isFinite(Number(row?.puzzle_id))
+      ? `#${pad3(Number(row.puzzle_id))}`
+      : "#---";
+    const modeLabel = formatModeLabel(row?.mode);
+    const result = row?.win ? "Win" : "Loss";
+    const guesses = scoreGuessValue(row);
+    const guessPart = row?.win && guesses ? ` in ${guesses}` : "";
+    const datePart = formatScoreDate(row?.created_at);
+    return `${puzzle} ${modeLabel}: ${result}${guessPart}${datePart ? ` (${datePart})` : ""}`;
+  }
+
+  function setMsg(t) {
+    myStatsOpen = false;
+    msgEl.classList.remove("stats-readout");
+    msgEl.textContent = (t || "").toUpperCase();
+  }
+
+  function setStatsMsg(lines) {
+    myStatsOpen = true;
+    msgEl.classList.add("stats-readout");
+    msgEl.textContent = lines;
+  }
+
+  async function openMyStats() {
+    const nickname = localStorage.getItem(PLAYER_NICKNAME_KEY) || "anonymous";
+    setStatsMsg(`Nickname: ${nickname}\nLoading...`);
+
+    const scores = await fetchMyScores({ limit: 12 });
+    if (!scores.length) {
+      setStatsMsg(`Nickname: ${nickname}\nNo results yet.`);
+      return;
+    }
+
+    const lines = scores.slice(0, 12).map(formatScoreLine);
+    setStatsMsg([`Nickname: ${nickname}`, ...lines].join("\n"));
+  }
+
+  function closeMyStats() {
+    if (!myStatsOpen) return;
+    if (!gameHasStarted() && !gameOver) {
+      showModeDesc();
+      return;
+    }
+    setMsg("");
+  }
+
+  function toggleMyStats() {
+    if (myStatsOpen) {
+      closeMyStats();
+      return;
+    }
+    void openMyStats();
+  }
+
   function setModeByKey(key) {
     const idx = MODES.findIndex(m => m.key === key);
     modeIndex = idx >= 0 ? idx : 0;
@@ -310,7 +409,6 @@
   }
 
   // ---------- Helpers ----------
-  function setMsg(t) { msgEl.textContent = (t || "").toUpperCase(); }
 
   function tileEl(r, c) {
     return boardEl.querySelector(`.tile[data-row="${r}"][data-col="${c}"]`);
@@ -1076,6 +1174,7 @@
   });
 
   if (modeBtn) modeBtn.addEventListener("click", handleModeClick);
+  if (myStatsBtn) myStatsBtn.addEventListener("click", toggleMyStats);
 
   // Hidden reset: dblclick title (desktop), triple-tap title (mobile), Shift+R
   let tapCount = 0;
@@ -1192,6 +1291,7 @@
       applyPinnedGreensToInputRow,
       getOrCreatePlayerId,
       submitScore,
+      fetchMyScores,
       setModeForTest: (key) => {
         setModeByKey(key);
         if (isPinnedGreensMode()) {
